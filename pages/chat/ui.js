@@ -1,5 +1,3 @@
-import * as chatInput from "../../modules/chat-input/chat-input";
-
 /**
  * 用户处理消息的收发UI更新
  */
@@ -23,12 +21,11 @@ export default class UI {
     /**
      * 发送消息时，渲染消息的发送状态为 发送中
      * @param sendMsg
-     * @param cbOk
      */
-    showItemForMoment(sendMsg, cbOk) {
+    async showItemForMoment(sendMsg) {
         if (!sendMsg) return;
         this.updateDataWhenStartSending(sendMsg);
-        cbOk && cbOk(this._page.data.chatItems.length - 1);
+        return {itemIndex: this._page.data.chatItems.length - 1};
     }
 
     /**
@@ -38,7 +35,7 @@ export default class UI {
      * @param needScroll
      */
     updateDataWhenStartSending(sendMsg, addToArr = true, needScroll = true) {
-        chatInput.closeExtraView();
+        this._page.chatInput.closeExtraView();
         sendMsg.sendStatus = 'sending';
         addToArr && this._page.data.chatItems.push(sendMsg);
         let obj = {};

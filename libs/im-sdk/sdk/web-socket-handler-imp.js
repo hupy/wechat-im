@@ -29,7 +29,7 @@ export default class WebSocketHandlerImp extends IIMHandler {
     _sendMsgImp({content, success, fail}) {
         wx.sendSocketMessage({
             data: JSON.stringify(content), success: () => {
-                success && success(content);
+                success && success({content});
             },
             fail: (res) => {
                 fail && fail(res);
@@ -81,8 +81,12 @@ export default class WebSocketHandlerImp extends IIMHandler {
                 getApp().globalData.friendsId = msg.friendsId;
                 if (this._msgQueue.length) {
                     let temp;
-                    while (temp = this._msgQueue.shift()) {
-                        this.sendMsg({content: {...temp, userId: msg.userInfo.userId}});
+                    while (this._isLogin && !!(temp = this._msgQueue.shift())) {
+                        this._sendMsgImp({
+                            content: {...temp.content, userId: msg.userInfo.userId},
+                            success: temp.resolve,
+                            fail: temp.reject
+                        });
                     }
                 }
             } else {

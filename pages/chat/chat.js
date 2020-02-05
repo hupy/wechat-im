@@ -1,5 +1,4 @@
 // pages/list/list.js
-import * as chatInput from "../../modules/chat-input/chat-input";
 import IMOperator from "./im-operator";
 import UI from "./ui";
 import MsgManager from "./msg-manager";
@@ -16,8 +15,17 @@ Page({
         textMessage: '',
         chatItems: [],
         latestPlayVoicePath: '',
-        isAndroid: true,
-        chatStatue: 'open'
+        chatStatue: 'open',
+        extraArr: [{
+            picName: 'choose_picture',
+            description: '照片'
+        }, {
+            picName: 'take_photos',
+            description: '拍摄'
+        }, {
+            picName: 'close_chat',
+            description: '自定义功能'
+        }],
     },
 
     /**
@@ -27,7 +35,9 @@ Page({
 
         const friend = JSON.parse(options.friend);
         console.log(friend);
-        this.initData();
+        this.setData({
+            pageHeight: wx.getSystemInfoSync().windowHeight,
+        });
         wx.setNavigationBarTitle({
             title: friend.friendName || ''
         });
@@ -40,83 +50,61 @@ Page({
         });
         this.UI.updateChatStatus('正在聊天中...');
     },
-    initData() {
-        let that = this;
-        let systemInfo = wx.getSystemInfoSync();
-        chatInput.init(this, {
-            systemInfo: systemInfo,
-            minVoiceTime: 1,
-            maxVoiceTime: 60,
-            startTimeDown: 56,
-            format: 'mp3',//aac/mp3
-            sendButtonBgColor: 'mediumseagreen',
-            sendButtonTextColor: 'white',
-            extraArr: [{
-                picName: 'choose_picture',
-                description: '照片'
-            }, {
-                picName: 'take_photos',
-                description: '拍摄'
-            }, {
-                picName: 'close_chat',
-                description: '自定义功能'
-            }],
-            // tabbarHeigth: 48
-        });
-
-        that.setData({
-            pageHeight: systemInfo.windowHeight,
-            isAndroid: systemInfo.system.indexOf("Android") !== -1,
-        });
-        wx.setNavigationBarTitle({
-            title: '好友'
-        });
-        that.textButton();
-        that.extraButton();
-        that.voiceButton();
+    onReady() {
+        this.chatInput = this.selectComponent('#chatInput');
     },
-    textButton() {
-        chatInput.setTextMessageListener((e) => {
-            let content = e.detail.value;
-            this.msgManager.sendMsg({type: IMOperator.TextType, content});
-        });
+    onSendMessageEvent(e) {
+        let content = e.detail.value;
+        this.msgManager.sendMsg({type: IMOperator.TextType, content});
     },
-    voiceButton() {
-        chatInput.recordVoiceListener((res, duration) => {
-            let tempFilePath = res.tempFilePath;
-            this.msgManager.sendMsg({type: IMOperator.VoiceType, content: tempFilePath, duration});
-        });
-        chatInput.setVoiceRecordStatusListener((status) => {
-            this.msgManager.stopAllVoice();
-        })
-    },
-
-    //模拟上传文件，注意这里的cbOk回调函数传入的参数应该是上传文件成功时返回的文件url，这里因为模拟，我直接用的savedFilePath
-    simulateUploadFile({savedFilePath, duration, itemIndex, success, fail}) {
-        setTimeout(() => {
-            let urlFromServerWhenUploadSuccess = savedFilePath;
-            success && success(urlFromServerWhenUploadSuccess);
-        }, 1000);
-    },
-    extraButton() {
-        let that = this;
-        chatInput.clickExtraListener((e) => {
-            let chooseIndex = parseInt(e.currentTarget.dataset.index);
-            if (chooseIndex === 2) {
-                that.myFun();
-                return;
-            }
-            wx.chooseImage({
-                count: 1, // 默认9
-                sizeType: ['compressed'],
-                sourceType: chooseIndex === 0 ? ['album'] : ['camera'],
-                success: (res) => {
-                    this.msgManager.sendMsg({type: IMOperator.ImageType, content: res.tempFilePaths[0]})
-                }
+    onVoiceRecordEvent(e) {
+        const {detail: {recordStatus, duration, tempFilePath, fileSize,}} = e;
+        if (recordStatus === 2) {
+            this.msgManager.sendMsg({
+                type: IMOperator.VoiceType,
+                content: tempFilePath,
+                duration: Math.floor(duration / 1000)
             });
-
+        }
+        this.msgManager.stopAllVoice();
+    },
+    /**
+     * 点击extra中的item时触发
+     * @param e
+     */
+    onExtraItemClickEvent(e) {
+        console.warn(e);
+        let chooseIndex = parseInt(e.detail.index);
+        if (chooseIndex === 2) {
+            this.myFun();
+            return;
+        }
+        wx.chooseImage({
+            count: 1, // 默认9
+            sizeType: ['compressed'],
+            sourceType: chooseIndex === 0 ? ['album'] : ['camera'],
+            success: (res) => {
+                this.msgManager.sendMsg({type: IMOperator.ImageType, content: res.tempFilePaths[0]})
+            }
         });
     },
+    /**
+     * 点击extra按钮时触发
+     * @param e
+     */
+    onExtraClickEvent(e) {
+        console.log(e);
+    },
+    //模拟上传文件，注意这里的cbOk回调函数传入的参数应该是上传文件成功时返回的文件url，这里因为模拟，我直接用的savedFilePath
+    simulateUploadFile({savedFilePath, duration, itemIndex}) {
+        return new Promise((resolve, reject) => {
+            setTimeout(() => {
+                let urlFromServerWhenUploadSuccess = savedFilePath;
+                resolve({url: urlFromServerWhenUploadSuccess});
+            }, 1000);
+        });
+    },
+
     /**
      * 自定义事件
      */
@@ -135,20 +123,22 @@ Page({
     },
 
     resetInputStatus() {
-        chatInput.closeExtraView();
+        this.chatInput.closeExtraView();
     },
 
-    sendMsg({content, itemIndex, success}) {
-        this.imOperator.onSimulateSendMsg({
-            content,
-            success: (msg) => {
-                this.UI.updateViewWhenSendSuccess(msg, itemIndex);
-                success && success(msg);
-            },
-            fail: () => {
-                this.UI.updateViewWhenSendFailed(itemIndex);
-            }
-        })
+    onUnload() {
+        this.msgManager.stopAllVoice();
+    },
+
+    async sendMsg({content, itemIndex}) {
+        try {
+            const {msg} = await this.imOperator.onSimulateSendMsg({content})
+            this.UI.updateViewWhenSendSuccess(msg, itemIndex);
+            return {msg};
+        } catch (e) {
+            console.error(e);
+            this.UI.updateViewWhenSendFailed(itemIndex);
+        }
     },
     /**
      * 重发消息
